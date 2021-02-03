@@ -3,9 +3,8 @@
 from setuptools import find_packages, setup
 
 inst_reqs = [
-    "rasterio==1.2b4",
-    "titiler==0.1.0a14",
-    "mangum>=0.10.0",
+    "rasterio~=1.2",
+    "titiler @ git+https://github.com/developmentseed/titiler.git",
     "rio-tiler-mvt @ git+https://github.com/cogeotiff/rio-tiler-mvt.git",
 ]
 
@@ -21,7 +20,7 @@ extra_reqs = {
 
 
 setup(
-    name="app",
+    name="titiler_mvt",
     version="0.0.1",
     description=u"TiTiler MVT",
     python_requires=">=3",

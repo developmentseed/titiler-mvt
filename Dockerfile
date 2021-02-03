@@ -5,7 +5,7 @@ RUN pip install cython==0.28
 WORKDIR /tmp
 
 COPY setup.py setup.py
-COPY app/ app/
+COPY titiler_mvt/ titiler_mvt/
 
 # Install dependencies
 RUN pip install . -t /var/task  --no-binary numpy,pydantic
