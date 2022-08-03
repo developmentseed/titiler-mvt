@@ -17,3 +17,13 @@ $ npm run cdk bootstrap
 # Deploy app
 $ npm run cdk deploy titiler-mvt-production
 ```
+
+## Local testing
+
+```
+$ pip install -r requirements.txt uvicorn
+$ uvicorn handler:app --reload --port 8080
+
+open http://127.0.0.1:8080/docs
+```
+![](https://user-images.githubusercontent.com/10407788/182575689-08eb7ac5-d9df-467d-8dad-0ca34cded46a.png)
