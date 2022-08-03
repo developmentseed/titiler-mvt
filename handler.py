@@ -3,6 +3,7 @@
 import logging
 from enum import Enum
 from typing import Any, Dict
+from urllib.parse import urlencode
 
 from mangum import Mangum
 from rio_tiler.io import COGReader
@@ -83,13 +84,6 @@ def info(url: str = Query(..., description="COG url")):
 
 @app.get(
     "/statistics",
-    response_model=Info,
-    response_model_exclude_none=True,
-    response_class=JSONResponse,
-    responses={200: {"description": "Return dataset's basic info."}},
-)
-@app.get(
-    "/statistics",
     response_model=Dict[str, BandStatistics],
     response_model_exclude_none=True,
     response_class=JSONResponse,
@@ -106,11 +100,11 @@ def statistics(url: str = Query(..., description="COG url")):
     responses={
         200: {
             "content": {"application/x-protobuf": {}},
-            "description": "Return an a vector tile.",
+            "description": "Return a vector tile.",
         }
     },
     response_class=Response,
-    description="Read COG and return a mvt tile",
+    description="Encode every pixels to MVT (polygon)",
 )
 def mvt_pixels(
     z: int,
@@ -119,13 +113,17 @@ def mvt_pixels(
     url: str = Query(..., description="COG url"),
     tilesize: int = Query(256, description="TileSize"),
 ):
-    """Handle /mvt requests."""
+    """Encode every pixels to MVT (polygon)."""
     timings = []
     headers: Dict[str, str] = {}
 
     with Timer() as t:
         with COGReader(url) as src_dst:
             tile_data = src_dst.tile(x, y, z, tilesize=tilesize)
+            band_names = [
+                src_dst.dataset.descriptions[ix - 1] or f"{ix}"
+                for ix in src_dst.dataset.indexes
+            ]
 
     timings.append(("cogread", round(t.elapsed * 1000, 2)))
 
@@ -133,6 +131,7 @@ def mvt_pixels(
         content = pixels_encoder(
             tile_data.data,
             tile_data.mask,
+            band_names,
             layer_name="cogeo",
             feature_type="polygon",
         )
@@ -150,11 +149,11 @@ def mvt_pixels(
     responses={
         200: {
             "content": {"application/x-protobuf": {}},
-            "description": "Return an a vector tile.",
+            "description": "Return a vector tile.",
         }
     },
     response_class=Response,
-    description="Read COG and return a mvt tile",
+    description="Polygonize tile data and return MVT.",
 )
 def mvt_shapes(
     z: int,
@@ -162,9 +161,9 @@ def mvt_shapes(
     y: int,
     url: str = Query(..., description="COG url"),
     tilesize: int = Query(256, description="TileSize"),
-    bidx: int = Query(description="Band index to render."),
+    bidx: int = Query(description="Band index to Polygonize."),
 ):
-    """Handle /mvt requests."""
+    """Polygonize tile data and return MVT."""
     timings = []
     headers: Dict[str, str] = {}
 
@@ -207,7 +206,15 @@ def tilejson(
     """Handle /tilejson.json requests."""
     kwargs: Dict[str, Any] = {"z": "{z}", "x": "{x}", "y": "{y}"}
     tile_url = request.url_for(f"mvt_{mvt_type.name}", **kwargs)
-    tile_url += f"?url={url}"
+
+    qs_key_to_remove = ["mvt_type"]
+    qs = [
+        (key, value)
+        for (key, value) in request.query_params._list
+        if key.lower() not in qs_key_to_remove
+    ]
+    if qs:
+        tile_url += f"?{urlencode(qs)}"
 
     with COGReader(url) as src_dst:
         bounds = src_dst.geographic_bounds
