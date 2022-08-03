@@ -1,7 +1,7 @@
 """Construct App."""
 
 import os
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_integrations as apigw_integrations
@@ -10,20 +10,6 @@ from aws_cdk import aws_lambda, core
 from config import StackSettings
 
 settings = StackSettings()
-
-
-DEFAULT_ENV = dict(
-    CPL_TMPDIR="/tmp",
-    GDAL_CACHEMAX="75%",
-    CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif",
-    GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-    GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES",
-    GDAL_HTTP_MULTIPLEX="YES",
-    GDAL_HTTP_VERSION="2",
-    PYTHONWARNINGS="ignore",
-    VSI_CACHE="TRUE",
-    VSI_CACHE_SIZE="1000000",
-)
 
 
 class LambdaStack(core.Stack):
@@ -35,10 +21,10 @@ class LambdaStack(core.Stack):
         id: str,
         memory: int = 1024,
         timeout: int = 30,
-        runtime: aws_lambda.Runtime = aws_lambda.Runtime.PYTHON_3_8,
+        runtime: aws_lambda.Runtime = aws_lambda.Runtime.PYTHON_3_9,
         concurrent: Optional[int] = None,
         permissions: Optional[List[iam.PolicyStatement]] = None,
-        env: dict = {},
+        environment: Optional[Dict] = None,
         code_dir: str = "./",
         **kwargs: Any,
     ) -> None:
@@ -46,26 +32,21 @@ class LambdaStack(core.Stack):
         super().__init__(scope, id, *kwargs)
 
         permissions = permissions or []
+        environment = environment or {}
 
-        lambda_env = {**DEFAULT_ENV, **env}
         lambda_function = aws_lambda.Function(
             self,
             f"{id}-lambda",
             runtime=runtime,
-            code=aws_lambda.Code.from_asset(
+            code=aws_lambda.Code.from_docker_build(
                 path=os.path.abspath(code_dir),
-                bundling=core.BundlingOptions(
-                    image=core.BundlingDockerImage.from_asset(
-                        os.path.abspath(code_dir), file="Dockerfile",
-                    ),
-                    command=["bash", "-c", "cp -R /var/task/. /asset-output/."],
-                ),
+                file="Dockerfile",
             ),
-            handler="titiler_mvt.main.handler",
+            handler="handler.handler",
             memory_size=memory,
             reserved_concurrent_executions=concurrent,
             timeout=core.Duration.seconds(timeout),
-            environment=lambda_env,
+            environment=environment,
         )
 
         for perm in permissions:
@@ -74,8 +55,8 @@ class LambdaStack(core.Stack):
         api = apigw.HttpApi(
             self,
             f"{id}-endpoint",
-            default_integration=apigw_integrations.LambdaProxyIntegration(
-                handler=lambda_function
+            default_integration=apigw_integrations.HttpLambdaIntegration(
+                f"{id}-integration", handler=lambda_function
             ),
         )
         core.CfnOutput(self, "Endpoint", value=api.url)
@@ -87,7 +68,7 @@ perms = []
 if settings.buckets:
     perms.append(
         iam.PolicyStatement(
-            actions=["s3:GetObject", "s3:HeadObject"],
+            actions=["s3:GetObject"],
             resources=[f"arn:aws:s3:::{bucket}*" for bucket in settings.buckets],
         )
     )
@@ -111,7 +92,7 @@ LambdaStack(
     timeout=settings.timeout,
     concurrent=settings.max_concurrent,
     permissions=perms,
-    env=settings.additional_env,
+    environment=settings.env,
 )
 
 app.synth()

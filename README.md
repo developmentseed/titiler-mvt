@@ -8,11 +8,12 @@ This is a DEMO based on work happening over [rio-tiler-mvt](https://github.com/c
 
 ```bash
 # Install AWS CDK requirements
-$ pip install -e .["deploy"]
+$ pip install -r requirements-cdk.txt
+$ npm install
 
 # Create AWS env
-$ cdk bootstrap
+$ npm run cdk bootstrap
 
 # Deploy app
-$ cdk deploy
+$ npm run cdk deploy titiler-mvt-production
 ```
