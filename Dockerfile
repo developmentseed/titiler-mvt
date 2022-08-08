@@ -11,7 +11,7 @@ RUN pip install cython
 
 # Install dependencies
 COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt -t /asset  --no-binary pydantic
+RUN pip install -r requirements.txt -t /asset
 
 # Reduce package size and remove useless files
 RUN cd /asset && find . -type f -name '*.pyc' | while read f; do n=$(echo $f | sed 's/__pycache__\///' | sed 's/.cpython-[2-3][0-9]//'); cp $f $n; done;
