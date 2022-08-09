@@ -2,7 +2,7 @@
 
 import logging
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 from mangum import Mangum
@@ -161,7 +161,7 @@ def mvt_shapes(
     y: int,
     url: str = Query(..., description="COG url"),
     tilesize: int = Query(256, description="TileSize"),
-    bidx: int = Query(description="Band index to Polygonize."),
+    bidx: Optional[int] = Query(None, description="Band index to Polygonize."),
 ):
     """Polygonize tile data and return MVT."""
     timings = []
@@ -169,6 +169,7 @@ def mvt_shapes(
 
     with Timer() as t:
         with COGReader(url) as src_dst:
+            bidx = bidx or src_dst.dataset.indexes[0]
             tile_data = src_dst.tile(x, y, z, tilesize=tilesize, indexes=bidx)
             cmap = src_dst.colormap or {}
 

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='utf-8' />
+        <title>mvt-shapes</title>
+        <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+        <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.6.1/mapbox-gl.js'></script>
+        <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.6.1/mapbox-gl.css' rel='stylesheet' />
+
+        <style>
+            body { margin:0; padding:0; width:100%; height:100%;}
+            #map { position:absolute; top:0; bottom:0; width:100%; }
+
+            .loading-map {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                color: #FFF;
+                background-color: #000;
+                text-align: center;
+                opacity: 0.5;
+                font-size: 45px;
+            }
+            .loading-map.off{
+                opacity: 0;
+                -o-transition: all .5s ease;
+                -webkit-transition: all .5s ease;
+                -moz-transition: all .5s ease;
+                -ms-transition: all .5s ease;
+                transition: all ease .5s;
+                visibility:hidden;
+            }
+            .middle-center {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+            }
+
+            .middle-center * {
+                display: block;
+                padding: 5px;
+            }
+
+            @media(max-width: 767px) {
+              .mapboxgl-ctrl-attrib {
+                  font-size: 10px;
+              }
+            }
+
+        </style>
+    </head>
+    <body>
+
+    <div id='map'>
+      <div id='loader' class="loading-map z3">
+        <div class="middle-center">
+          <div class="round animation-spin animation--infinite animation--speed-1">
+            <svg class='icon icon--l inline-block'><use xlink:href='#icon-satellite'/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="zoom-info"><span id="zoom"></span></div>
+    </div>
+
+    <script>
+
+    mapboxgl.accessToken = ''
+
+    var map = new mapboxgl.Map({
+        container: 'map',
+        style: {
+            version: 8,
+            sources: {
+            'toner-lite': {
+                type: 'raster',
+                tiles: [
+                'https://stamen-tiles-a.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png',
+                'https://stamen-tiles-b.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png',
+                'https://stamen-tiles-c.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png',
+                'https://stamen-tiles-d.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png'
+                ],
+                tileSize: 256,
+                attribution:
+                'Map tiles by <a href="http://stamen.com">Stamen Design</a>, under <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>. Data by <a href="http://openstreetmap.org">OpenStreetMap</a>, under <a href="http://www.openstreetmap.org/copyright">ODbL</a>.'
+            }
+            },
+            layers: [
+            {
+                'id': 'basemap',
+                'type': 'raster',
+                'source': 'toner-lite',
+                'minzoom': 0,
+                'maxzoom': 20
+            }
+            ]
+        },
+        center: [0, 0],
+        zoom: 1
+    })
+    map.addControl(new mapboxgl.NavigationControl(), "top-left");
+
+    const bboxPolygon = (bounds)  => {
+        return {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [[
+                    [bounds[0], bounds[1]],
+                    [bounds[2], bounds[1]],
+                    [bounds[2], bounds[3]],
+                    [bounds[0], bounds[3]],
+                    [bounds[0], bounds[1]]
+                ]]
+            },
+            'properties': {}
+        }
+    }
+
+    const addAOI = (bounds) => {
+      const geojson = {
+          "type": "FeatureCollection",
+          "features": [bboxPolygon(bounds)]
+      }
+
+      map.addSource('aoi', {
+        'type': 'geojson',
+        'data': geojson
+      })
+
+      map.addLayer({
+        id: 'aoi-polygon',
+        type: 'line',
+        source: 'aoi',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': '#3bb2d0',
+          'line-width': 1
+        }
+      })
+      return
+    }
+
+    map.on('load', () => {
+      const url = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v100/2020/map/ESA_WorldCover_10m_2020_v100_N39W111_Map.tif'
+      fetch(`http://127.0.0.1:8081/tilejson.json?url=${url}&mvt_type=shapes`)
+        .then(res => {
+          if (res.ok) return res.json()
+          throw new Error('Network response was not ok.')
+        })
+        .then(data => {
+          console.log(data)
+          map.addSource(
+            'mvt',
+            {
+              type: 'vector',
+              tiles: data.tiles,
+              bounds: data.bounds,
+              minzoom: data.minzoom,
+              maxzoom: data.maxzoom,
+            }
+          )
+          map.addLayer({
+            id: 'mvt',
+            source: 'mvt',
+            'source-layer': 'cogeo',
+            type: 'fill',
+            source: 'mvt',
+            paint: {
+              'fill-color': ['get', 'color'],
+              'fill-outline-color': ['get', 'color'],
+              'fill-opacity': 1
+            }
+          })
+
+          map.addLayer({
+            id: 'mvt-selected',
+            source: 'mvt',
+            'source-layer': 'cogeo',
+            type: 'fill',
+            source: 'mvt',
+            paint: {
+              'fill-outline-color': '#000000',
+              'fill-color': '#FFFFFF',
+              'fill-opacity': 1
+            },
+            filter: ['==', 'value', '']
+          })
+
+          // remove loader
+          document.getElementById('loader').classList.toggle('off')
+
+          let bounds = [...data.bounds]
+          // Bounds crossing dateline
+          if (bounds[0] > bounds[2]) {
+            bounds[0] = bounds[0] - 360
+          }
+          map.fitBounds(
+            [[bounds[0], bounds[1]], [bounds[2], bounds[3]]]
+          )
+          addAOI(bounds)
+        })
+        .catch(err => {
+          console.warn(err)
+        })
+
+      map.on('mousemove', (e) => {
+        const mouseRadius = 1
+        const features = map.queryRenderedFeatures(e.point, { layers: ['mvt'] })
+        if (features.length > 0) {
+          map.getCanvas().style.cursor = 'pointer'
+
+        } else {
+          map.getCanvas().style.cursor = 'inherit'
+        }
+      })
+      map.on('click', 'mvt', (e) => {
+        let props = e.features[0].properties
+        map.setFilter('mvt-selected', ['in', 'value', props.value]);
+      })
+    })
+
+    </script>
+
+    </body>
+    </html>
